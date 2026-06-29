@@ -60,6 +60,19 @@ func (c *TopicCache) SetTopicID(groupID int64, sender string, topicID int) error
 	return c.save()
 }
 
+// DeleteTopicID 删除某个发件人的话题缓存。
+// 当话题在 Telegram 群里被删除导致 thread 失效时调用,以便下次重新创建。
+func (c *TopicCache) DeleteTopicID(groupID int64, sender string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if topics, ok := c.GroupTopics[groupID]; ok {
+		delete(topics, sender)
+	}
+
+	return c.save()
+}
+
 func (c *TopicCache) load() error {
 	data, err := os.ReadFile(c.filePath)
 	if err != nil {

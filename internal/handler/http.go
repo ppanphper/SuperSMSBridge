@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"super-sms-bridge/internal/service"
 	"super-sms-bridge/internal/telegram"
@@ -41,6 +42,7 @@ func (h *HTTPHandler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 
 	var msg service.Message
 	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Printf("[HTTP] 请求格式错误: %v, body=%s", err, string(body))
 		writeJSON(w, &service.Response{
 			Code:    http.StatusBadRequest,
 			Message: "请求格式错误",
@@ -48,8 +50,11 @@ func (h *HTTPHandler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[HTTP] 收到消息: sender=%q, 来自=%s", msg.Sender, r.RemoteAddr)
+
 	// 验证签名
 	if !utils.ValidateSign(msg.TimeStamp, msg.Sign, h.secret) {
+		log.Printf("[HTTP] 签名验证失败: sender=%q, timestamp=%s (请检查客户端 SECRET_KEY 是否一致)", msg.Sender, msg.TimeStamp)
 		writeJSON(w, &service.Response{
 			Code:    http.StatusUnauthorized,
 			Message: "签名验证失败",
@@ -59,6 +64,7 @@ func (h *HTTPHandler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 
 	// 发送消息到Telegram
 	if err := h.tg.SendMessage(msg.Sender, msg.Text); err != nil {
+		log.Printf("[HTTP] 转发到 Telegram 失败: sender=%q, err=%v", msg.Sender, err)
 		writeJSON(w, &service.Response{
 			Code:    http.StatusInternalServerError,
 			Message: "发送消息失败: " + err.Error(),
@@ -66,6 +72,7 @@ func (h *HTTPHandler) HandleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[HTTP] 转发成功: sender=%q", msg.Sender)
 	writeJSON(w, &service.Response{
 		Code:    0,
 		Message: "发送成功",
