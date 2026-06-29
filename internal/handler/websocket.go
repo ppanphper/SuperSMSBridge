@@ -86,8 +86,11 @@ func (h *WSHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (h *WSHandler) handleSendMessage(conn *websocket.Conn, msg *service.Message) {
 	response := &service.Response{}
 
+	log.Printf("[WS] 收到消息: sender=%q, 来自=%s", msg.Sender, conn.RemoteAddr())
+
 	// 验证签名
 	if !utils.ValidateSign(msg.TimeStamp, msg.Sign, h.secret) {
+		log.Printf("[WS] 签名验证失败: sender=%q, timestamp=%s (请检查客户端 SECRET_KEY 是否一致)", msg.Sender, msg.TimeStamp)
 		response.Code = http.StatusUnauthorized
 		response.Message = "签名验证失败"
 		conn.WriteJSON(response)
@@ -96,6 +99,7 @@ func (h *WSHandler) handleSendMessage(conn *websocket.Conn, msg *service.Message
 
 	// 发送消息到Telegram
 	if err := h.tg.SendMessage(msg.Sender, msg.Text); err != nil {
+		log.Printf("[WS] 转发到 Telegram 失败: sender=%q, err=%v", msg.Sender, err)
 		response.Code = http.StatusInternalServerError
 		response.Message = "发送消息失败: " + err.Error()
 		conn.WriteJSON(response)
@@ -105,6 +109,7 @@ func (h *WSHandler) handleSendMessage(conn *websocket.Conn, msg *service.Message
 	// 存储连接，用于后续推送消息
 	h.clients.Store(msg.Sender, conn)
 
+	log.Printf("[WS] 转发成功: sender=%q", msg.Sender)
 	response.Code = 0
 	response.Message = "发送成功"
 	conn.WriteJSON(response)
